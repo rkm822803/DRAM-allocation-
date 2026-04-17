@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feeder Packet Allocator</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e1a;--surface:#0f1628;--card:#141c35;--border:#1e2d55;
+  --accent:#00d4ff;--accent2:#ff6b35;--accent3:#7fff6b;--accent4:#ffd700;
+  --text:#e0eaff;--muted:#6b7db3;--danger:#ff4060;--success:#00ff88;--warning:#ffb800;
+  --purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;
+  min-height:100vh;padding:16px;
+  background-image:
+    radial-gradient(ellipse at 20% 20%,rgba(0,80,160,.12) 0%,transparent 60%),
+    radial-gradient(ellipse at 80% 80%,rgba(0,180,255,.08) 0%,transparent 60%),
+    repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(30,45,85,.2) 40px,rgba(30,45,85,.2) 41px),
+    repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(30,45,85,.2) 40px,rgba(30,45,85,.2) 41px);
+}
+
+/* ── NAV TABS ── */
+.nav-tabs{
+  display:flex;gap:0;max-width:920px;margin:0 auto 0;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;
+}
+.nav-tab{
+  flex:1;padding:13px 10px;text-align:center;cursor:pointer;
+  font-family:'Rajdhani',sans-serif;font-size:1em;font-weight:700;
+  letter-spacing:3px;text-transform:uppercase;color:var(--muted);
+  border-right:1px solid var(--border);transition:all .2s;user-select:none;
+}
+.nav-tab:last-child{border-right:none;}
+.nav-tab.active{background:linear-gradient(135deg,rgba(0,212,255,.12),rgba(0,136,255,.08));color:var(--accent);}
+.nav-tab:hover:not(.active){color:var(--text);background:rgba(255,255,255,.03);}
+
+.page{display:none;}.page.active{display:block;}
+
+/* ── HEADER ── */
+.header{text-align:center;padding:22px 0 12px;}
+.header h1{
+  font-family:'Rajdhani',sans-serif;font-size:2.4em;font-weight:700;
+  letter-spacing:6px;text-transform:uppercase;
+  background:linear-gradient(135deg,var(--accent),#0088ff,var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 16px rgba(0,212,255,.4));
+}
+.header p{color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:.75em;letter-spacing:3px;margin-top:4px;}
+
+.wrap{max-width:920px;margin:0 auto;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px;}
+
+/* ── CARDS ── */
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:18px;position:relative;overflow:hidden;
+}
+.card-top{position:absolute;top:0;left:0;right:0;height:3px;}
+.ct-blue{background:linear-gradient(90deg,var(--accent),transparent);}
+.ct-orange{background:linear-gradient(90deg,var(--accent2),transparent);}
+.ct-green{background:linear-gradient(90deg,var(--accent3),transparent);}
+.ct-purple{background:linear-gradient(90deg,var(--purple),transparent);}
+.ct-gold{background:linear-gradient(90deg,var(--accent4),transparent);}
+
+.card-title{
+  font-family:'Rajdhani',sans-serif;font-size:1.1em;font-weight:700;
+  letter-spacing:3px;text-transform:uppercase;margin-bottom:13px;
+  display:flex;align-items:center;gap:8px;
+}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;}
+.d-blue{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+.d-orange{background:var(--accent2);box-shadow:0 0 6px var(--accent2);}
+.d-green{background:var(--accent3);box-shadow:0 0 6px var(--accent3);}
+.d-purple{background:var(--purple);box-shadow:0 0 6px var(--purple);}
+.d-gold{background:var(--accent4);box-shadow:0 0 6px var(--accent4);}
+
+/* ── KIT ID ── */
+.kit-section{margin-top:16px;}
+.kit-row{display:flex;align-items:center;gap:10px;}
+.kit-badge{
+  font-family:'Share Tech Mono',monospace;font-size:.7em;color:var(--muted);
+  letter-spacing:2px;white-space:nowrap;min-width:56px;
+}
+input[type="text"],input[type="number"]{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:'Share Tech Mono',monospace;font-size:1em;
+  padding:9px 13px;width:100%;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+input[type="text"]:focus,input[type="number"]:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1);
+}
+.input-row{display:flex;align-items:center;gap:10px;}
+.input-lbl{font-family:'Share Tech Mono',monospace;font-size:.72em;color:var(--muted);letter-spacing:2px;min-width:72px;}
+
+/* ── BUTTONS ── */
+.c-wrap{display:flex;justify-content:center;margin:14px 0;}
+.btn{
+  border:none;border-radius:10px;color:#fff;font-family:'Rajdhani',sans-serif;
+  font-weight:700;letter-spacing:4px;text-transform:uppercase;cursor:pointer;transition:all .2s;
+}
+.btn-blue{background:linear-gradient(135deg,#0044aa,#0088ff);padding:12px 48px;font-size:1.05em;box-shadow:0 4px 16px rgba(0,136,255,.3);}
+.btn-blue:hover{box-shadow:0 6px 24px rgba(0,212,255,.5);transform:translateY(-2px);}
+.btn-green{background:linear-gradient(135deg,#004d00,#00aa44);padding:11px 40px;font-size:.95em;box-shadow:0 4px 14px rgba(0,170,68,.3);}
+.btn-green:hover{box-shadow:0 6px 24px rgba(0,255,136,.4);transform:translateY(-2px);}
+.btn-red{background:linear-gradient(135deg,#6b0000,#cc2222);padding:8px 22px;font-size:.8em;box-shadow:0 3px 10px rgba(200,30,30,.25);}
+.btn-red:hover{box-shadow:0 5px 18px rgba(255,64,96,.4);transform:translateY(-1px);}
+.btn-purple{background:linear-gradient(135deg,#3b0082,#7c3aed);padding:8px 22px;font-size:.8em;box-shadow:0 3px 10px rgba(124,58,237,.25);}
+.btn-purple:hover{transform:translateY(-1px);}
+.btn-sm{padding:7px 18px;font-size:.75em;letter-spacing:2px;}
+.btn:active{transform:translateY(0)!important;}
+
+/* ── MISC ── */
+.hidden{display:none!important;}
+.fade-in{animation:fadeIn .35s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.fields-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fgrp{display:flex;flex-direction:column;gap:4px;}
+.flbl{font-family:'Share Tech Mono',monospace;font-size:.68em;letter-spacing:1px;}
+.flbl-b{color:var(--accent);}.flbl-o{color:var(--accent2);}
+
+/* totals */
+.totals-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px;}
+.tot-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 10px;text-align:center;}
+.tot-lbl{font-family:'Share Tech Mono',monospace;font-size:.62em;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+.tot-val{font-family:'Rajdhani',sans-serif;font-size:1.8em;font-weight:700;}
+.tot-expr{font-family:'Share Tech Mono',monospace;font-size:.58em;color:var(--muted);margin-top:4px;word-break:break-all;line-height:1.5;}
+.tv-blue .tot-val{color:var(--accent);}
+.tv-orange .tot-val{color:var(--accent2);}
+.tv-gold .tot-val{color:var(--accent4);}
+
+/* split radios */
+.radio-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.ropt{
+  display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;
+  font-family:'Share Tech Mono',monospace;font-size:.76em;letter-spacing:1px;
+  padding:8px 14px;border-radius:8px;border:1px solid var(--border);transition:all .2s;
+}
+.ropt input{display:none;}
+.ropt.active{border-color:var(--accent3);background:rgba(127,255,107,.08);color:var(--accent3);}
+.ropt:hover:not(.active){border-color:var(--muted);}
+
+.err-box{
+  background:rgba(255,64,96,.1);border:1px solid rgba(255,64,96,.35);border-radius:8px;
+  padding:11px 14px;color:var(--danger);font-family:'Share Tech Mono',monospace;
+  font-size:.76em;text-align:center;margin-bottom:11px;
+}
+
+/* result table */
+.res-title{
+  font-family:'Rajdhani',sans-serif;font-size:1.25em;font-weight:700;letter-spacing:4px;
+  text-transform:uppercase;color:var(--accent);text-align:center;margin-bottom:12px;
+  filter:drop-shadow(0 0 10px rgba(0,212,255,.35));
+}
+.kit-label-bar{
+  background:linear-gradient(135deg,rgba(167,139,250,.1),rgba(99,102,241,.07));
+  border:1px solid rgba(167,139,250,.3);border-radius:9px;
+  padding:10px 16px;text-align:center;margin-bottom:12px;
+  font-family:'Rajdhani',sans-serif;font-size:1.1em;letter-spacing:3px;color:var(--purple);
+}
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);}
+table{width:100%;border-collapse:separate;border-spacing:0;font-family:'Share Tech Mono',monospace;font-size:.76em;}
+thead th{
+  background:linear-gradient(135deg,#0d1f40,#0a1830);padding:11px 13px;
+  text-align:center;letter-spacing:2px;font-size:.68em;text-transform:uppercase;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+th.th-f{color:var(--accent);}th.th-p{color:var(--accent2);}
+th.th-q{color:var(--accent4);}th.th-r{color:var(--accent3);}th.th-s{color:var(--muted);}
+tbody td{padding:9px 13px;text-align:center;border-bottom:1px solid rgba(30,45,85,.5);}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:rgba(0,212,255,.03);}
+
+.badge{display:inline-block;padding:2px 9px;border-radius:14px;font-size:.7em;letter-spacing:1px;font-weight:600;}
+.b-consumed{background:rgba(255,64,96,.12);color:var(--danger);border:1px solid rgba(255,64,96,.3);}
+.b-mother{background:rgba(255,215,0,.15);color:var(--accent4);border:1px solid rgba(255,215,0,.4);}
+.b-split{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.25);}
+.b-full{background:rgba(0,255,136,.1);color:var(--success);border:1px solid rgba(0,255,136,.25);}
+
+/* flow */
+.flow-title{
+  font-family:'Rajdhani',sans-serif;font-size:1em;font-weight:700;letter-spacing:3px;
+  text-transform:uppercase;color:var(--accent3);text-align:center;margin:14px 0 9px;
+}
+.flow-grid{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+.flow-block{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 14px;min-width:155px;}
+.flow-name{font-family:'Rajdhani',sans-serif;font-size:.9em;font-weight:700;letter-spacing:2px;text-align:center;text-transform:uppercase;margin-bottom:6px;}
+.flow-row{
+  display:flex;align-items:center;gap:6px;font-family:'Share Tech Mono',monospace;
+  font-size:.71em;color:var(--muted);padding:3px 0;border-bottom:1px solid rgba(30,45,85,.4);
+}
+.flow-row:last-child{border-bottom:none;}
+.fp{color:var(--accent2);font-weight:700;}.fq{color:var(--accent4);}
+
+.mother-box{
+  background:linear-gradient(135deg,rgba(255,215,0,.08),rgba(255,184,0,.05));
+  border:1px solid rgba(255,215,0,.3);border-radius:10px;padding:13px 16px;
+  text-align:center;font-family:'Rajdhani',sans-serif;font-size:1.15em;font-weight:700;
+  letter-spacing:3px;color:var(--accent4);filter:drop-shadow(0 0 8px rgba(255,215,0,.2));
+  margin-top:12px;
+}
+.sum-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;margin-top:12px;}
+.sum-box{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 14px;text-align:center;}
+.sum-lbl{font-family:'Share Tech Mono',monospace;font-size:.62em;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:6px;}
+.sum-val{font-family:'Rajdhani',sans-serif;font-size:1.75em;font-weight:700;}
+
+/* ══ HISTORY PAGE ══ */
+.history-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 0 10px;flex-wrap:wrap;gap:10px;
+}
+.history-title{
+  font-family:'Rajdhani',sans-serif;font-size:1.5em;font-weight:700;
+  letter-spacing:4px;text-transform:uppercase;color:var(--purple);
+  filter:drop-shadow(0 0 8px rgba(167,139,250,.3));
+}
+.history-count{
+  font-family:'Share Tech Mono',monospace;font-size:.72em;
+  color:var(--muted);letter-spacing:2px;
+}
+.hist-empty{
+  text-align:center;padding:60px 20px;
+  font-family:'Share Tech Mono',monospace;font-size:.82em;color:var(--muted);
+  letter-spacing:2px;
+}
+.hist-item{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  margin-bottom:12px;overflow:hidden;transition:border-color .2s;
+}
+.hist-item:hover{border-color:rgba(167,139,250,.3);}
+.hist-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;cursor:pointer;gap:10px;flex-wrap:wrap;
+}
+.hist-kit{
+  font-family:'Rajdhani',sans-serif;font-size:1.15em;font-weight:700;
+  letter-spacing:3px;color:var(--purple);
+}
+.hist-meta{
+  font-family:'Share Tech Mono',monospace;font-size:.68em;
+  color:var(--muted);letter-spacing:1px;
+}
+.hist-tags{display:flex;gap:6px;flex-wrap:wrap;}
+.hist-tag{
+  font-family:'Share Tech Mono',monospace;font-size:.65em;
+  padding:3px 9px;border-radius:10px;letter-spacing:1px;
+}
+.ht-req{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.2);}
+.ht-avail{background:rgba(255,107,53,.1);color:var(--accent2);border:1px solid rgba(255,107,53,.2);}
+.ht-mother{background:rgba(255,215,0,.12);color:var(--accent4);border:1px solid rgba(255,215,0,.25);}
+.ht-mode{background:rgba(127,255,107,.1);color:var(--accent3);border:1px solid rgba(127,255,107,.2);}
+.hist-actions{display:flex;gap:7px;}
+.hist-body{
+  border-top:1px solid var(--border);padding:16px 18px;
+  display:none;
+}
+.hist-body.open{display:block;animation:fadeIn .25s ease;}
+.hist-section-lbl{
+  font-family:'Share Tech Mono',monospace;font-size:.65em;color:var(--muted);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;margin-top:14px;
+}
+.hist-section-lbl:first-child{margin-top:0;}
+.search-bar{
+  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+}
+.search-bar input{flex:1;}
+.search-bar .s-icon{
+  font-size:1.1em;color:var(--muted);flex-shrink:0;
+}
+
+/* ══ LOGIN SCREEN ══ */
+#loginOverlay{
+  position:fixed;inset:0;z-index:9999;
+  background:var(--bg);
+  background-image:
+    radial-gradient(ellipse at 30% 30%,rgba(0,100,200,.18) 0%,transparent 55%),
+    radial-gradient(ellipse at 70% 70%,rgba(0,180,255,.1) 0%,transparent 55%),
+    repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(30,45,85,.2) 40px,rgba(30,45,85,.2) 41px),
+    repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(30,45,85,.2) 40px,rgba(30,45,85,.2) 41px);
+  display:flex;align-items:center;justify-content:center;
+}
+#loginOverlay.hide{display:none!important;}
+.login-card{
+  background:var(--card);border:1px solid var(--border);border-radius:20px;
+  padding:42px 38px;max-width:400px;width:90%;position:relative;overflow:hidden;
+  box-shadow:0 0 60px rgba(0,136,255,.12), 0 20px 60px rgba(0,0,0,.5);
+}
+.login-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:4px;
+  background:linear-gradient(90deg,var(--accent),#0055ff,var(--purple));
+}
+.login-logo{
+  text-align:center;margin-bottom:28px;
+}
+.login-logo h2{
+  font-family:'Rajdhani',sans-serif;font-size:1.9em;font-weight:700;
+  letter-spacing:6px;text-transform:uppercase;
+  background:linear-gradient(135deg,var(--accent),#0088ff);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  filter:drop-shadow(0 0 14px rgba(0,212,255,.4));
+}
+.login-logo p{
+  font-family:'Share Tech Mono',monospace;font-size:.7em;
+  color:var(--muted);letter-spacing:3px;margin-top:4px;
+}
+.login-label{
+  font-family:'Share Tech Mono',monospace;font-size:.72em;
+  color:var(--muted);letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:8px;display:block;
+}
+.login-input-wrap{position:relative;margin-bottom:10px;}
+.login-input-wrap input{
+  font-size:1.5em;letter-spacing:8px;text-align:center;
+  padding:13px 18px;width:100%;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;color:var(--accent);
+  font-family:'Share Tech Mono',monospace;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.login-input-wrap input:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.12);
+}
+.login-input-wrap input::placeholder{
+  color:rgba(107,125,179,.4);letter-spacing:4px;font-size:.7em;
+}
+.login-hint{
+  font-family:'Share Tech Mono',monospace;font-size:.65em;
+  color:var(--muted);letter-spacing:1px;text-align:center;margin-bottom:22px;
+}
+.login-err{
+  background:rgba(255,64,96,.1);border:1px solid rgba(255,64,96,.35);
+  border-radius:8px;padding:9px 14px;color:var(--danger);
+  font-family:'Share Tech Mono',monospace;font-size:.72em;
+  text-align:center;margin-bottom:14px;
+  animation:fadeIn .2s ease;
+}
+.login-btn{
+  width:100%;padding:14px;font-size:1.05em;letter-spacing:5px;
+  background:linear-gradient(135deg,#0044aa,#0088ff);
+  border:none;border-radius:10px;color:#fff;
+  font-family:'Rajdhani',sans-serif;font-weight:700;text-transform:uppercase;
+  cursor:pointer;transition:all .2s;
+  box-shadow:0 4px 18px rgba(0,136,255,.3);
+}
+.login-btn:hover{box-shadow:0 6px 28px rgba(0,212,255,.5);transform:translateY(-2px);}
+.login-btn:active{transform:translateY(0);}
+.login-empid{
+  text-align:center;margin-top:16px;
+  font-family:'Share Tech Mono',monospace;font-size:.68em;
+  color:var(--muted);letter-spacing:2px;
+}
+.login-empid span{color:var(--accent);font-weight:700;}
+/* digit indicators */
+.digit-dots{display:flex;justify-content:center;gap:8px;margin-bottom:16px;}
+.digit-dot{
+  width:10px;height:10px;border-radius:50%;
+  border:1.5px solid var(--border);background:transparent;
+  transition:all .15s;
+}
+.digit-dot.filled{background:var(--accent);border-color:var(--accent);box-shadow:0 0 6px var(--accent);}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN OVERLAY ══ -->
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="login-logo">
+      <h2>⚡ FPA</h2>
+      <p>// FEEDER PACKET ALLOCATOR //</p>
+    </div>
+    <label class="login-label">Employee ID</label>
+    <div class="login-input-wrap">
+      <input type="text" id="empIdInput" maxlength="7" placeholder="0000000"
+        oninput="onEmpInput(this)" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off" inputmode="numeric">
+    </div>
+    <div class="digit-dots" id="digitDots">
+      <div class="digit-dot" id="dd0"></div>
+      <div class="digit-dot" id="dd1"></div>
+      <div class="digit-dot" id="dd2"></div>
+      <div class="digit-dot" id="dd3"></div>
+      <div class="digit-dot" id="dd4"></div>
+      <div class="digit-dot" id="dd5"></div>
+      <div class="digit-dot" id="dd6"></div>
+    </div>
+    <div class="login-hint">Enter your 7-digit Employee ID</div>
+    <div id="loginErr" class="login-err" style="display:none;"></div>
+    <button class="login-btn" onclick="doLogin()">🔓 CONTINUE</button>
+    <div class="login-empid" id="loggedEmpBar" style="display:none;">
+      Logged in: <span id="loggedEmpId"></span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="header">
+    <h1>⚡ Feeder Packet Allocator</h1>
+    <p>// INDUSTRIAL OPTIMIZATION ENGINE //</p>
+    <div id="empBadge" style="display:inline-block;margin-top:8px;background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);border-radius:20px;padding:4px 16px;font-family:'Share Tech Mono',monospace;font-size:.68em;color:var(--accent);letter-spacing:2px;">
+      EMP: <span id="empBadgeId" style="font-weight:700;">-------</span>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="switchPage('calc')">🔧 Calculator</div>
+    <div class="nav-tab" onclick="switchPage('history')">🕓 History</div>
+  </div>
+
+  <!-- ══════════════ CALCULATOR PAGE ══════════════ -->
+  <div id="page-calc" class="page active">
+
+    <!-- KIT ID -->
+    <div class="kit-section">
+      <div class="card" style="margin-top:16px;">
+        <div class="card-top ct-purple"></div>
+        <div class="card-title"><span class="dot d-purple"></span>Kit ID</div>
+        <div class="kit-row">
+          <span class="kit-badge">KIT ID :</span>
+          <input type="text" id="kitId" placeholder="Enter Kit ID  e.g.  KIT-2024-001" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <!-- FEEDER + PACKET COUNT -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-top ct-blue"></div>
+        <div class="card-title"><span class="dot d-blue"></span>Feeders</div>
+        <div class="input-row">
+          <span class="input-lbl">COUNT :</span>
+          <input type="number" id="numFeeders" min="1" max="20" placeholder="e.g. 3">
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-top ct-orange"></div>
+        <div class="card-title"><span class="dot d-orange"></span>Packets</div>
+        <div class="input-row">
+          <span class="input-lbl">COUNT :</span>
+          <input type="number" id="numPackets" min="1" max="20" placeholder="e.g. 5">
+        </div>
+      </div>
+    </div>
+
+    <div class="c-wrap">
+      <button class="btn btn-blue" onclick="doAllocate()">⚡ ALLOCATE</button>
+    </div>
+
+    <!-- STEP 2: QTY INPUTS + TOTALS + SPLIT -->
+    <div id="step2" class="hidden fade-in">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-top ct-blue"></div>
+          <div class="card-title"><span class="dot d-blue"></span>Feeder Requirements</div>
+          <div class="fields-grid" id="feederFields"></div>
+        </div>
+        <div class="card">
+          <div class="card-top ct-orange"></div>
+          <div class="card-title"><span class="dot d-orange"></span>Packet Quantities</div>
+          <div class="fields-grid" id="packetFields"></div>
+        </div>
+      </div>
+
+      <div class="totals-grid">
+        <div class="tot-box tv-blue">
+          <div class="tot-lbl">Total Requirements</div>
+          <div class="tot-val" id="totReq">0</div>
+          <div class="tot-expr" id="totReqExpr"></div>
+        </div>
+        <div class="tot-box tv-orange">
+          <div class="tot-lbl">Total Available</div>
+          <div class="tot-val" id="totAvail">0</div>
+          <div class="tot-expr" id="totAvailExpr"></div>
+        </div>
+        <div class="tot-box tv-gold">
+          <div class="tot-lbl">Mother Quantity</div>
+          <div class="tot-val" id="totMother">0</div>
+          <div class="tot-expr" id="totMotherExpr"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px;">
+        <div class="card-top ct-green"></div>
+        <div class="card-title"><span class="dot d-green"></span>Split Mode</div>
+        <div class="radio-row">
+          <label class="ropt" id="opt-small" onclick="setSplit('small')">
+            <input type="radio" name="sm" value="small">
+            📦 Small &nbsp;<small style="opacity:.55;">(splits &lt; 50 allowed)</small>
+          </label>
+          <label class="ropt active" id="opt-large" onclick="setSplit('large')">
+            <input type="radio" name="sm" value="large" checked>
+            🏭 Large &nbsp;<small style="opacity:.55;">(every split ≥ 50)</small>
+          </label>
+        </div>
+        <div id="errBox" class="err-box hidden"></div>
+        <div class="c-wrap" style="margin:0;">
+          <button class="btn btn-green" onclick="doCalculate()">📊 CALCULATE ALLOCATION</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: RESULT -->
+    <div id="step3" class="hidden fade-in" style="margin-top:16px;">
+      <div class="res-title">📊 ALLOCATION RESULT</div>
+      <div id="kitLabelBar" class="kit-label-bar hidden"></div>
+      <div class="tbl-wrap" id="resultTable"></div>
+      <div id="flowArea"></div>
+      <div id="motherBox" class="mother-box hidden"></div>
+      <div class="sum-grid" id="sumGrid"></div>
+      <div class="c-wrap" style="margin-top:16px;">
+        <button class="btn btn-green" onclick="saveToHistory()">💾 SAVE TO HISTORY</button>
+      </div>
+      <div id="saveMsg" class="hidden" style="text-align:center;font-family:'Share Tech Mono',monospace;font-size:.75em;color:var(--success);margin-top:6px;letter-spacing:2px;"></div>
+    </div>
+
+  </div><!-- /page-calc -->
+
+  <!-- ══════════════ HISTORY PAGE ══════════════ -->
+  <div id="page-history" class="page">
+    <div class="history-header">
+      <div>
+        <div class="history-title">🕓 Kit History</div>
+        <div class="history-count" id="histCount">0 records saved</div>
+      </div>
+      <button class="btn btn-green btn-sm" onclick="exportToExcel()">📥 Export to Excel</button>
+    </div>
+
+    <div class="search-bar">
+      <span class="s-icon">🔍</span>
+      <input type="text" id="histSearch" placeholder="Search by Kit ID..." oninput="renderHistory()">
+    </div>
+
+    <div id="histList"></div>
+  </div><!-- /page-history -->
+
+</div><!-- /wrap -->
+
+<script>
+// ── globals ──────────────────────────────────────────────────────────────────
+let currentEmpId='';
+let NF=0, NP=0, splitMode='large';
+let lastResult=null, lastFv=[], lastPv=[], lastTotalReq=0, lastTotalAvail=0;
+
+// ── PAGE SWITCH ───────────────────────────────────────────────────────────────
+function switchPage(p){
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach((el,i)=>{
+    if((p==='calc'&&i===0)||(p==='history'&&i===1)) el.classList.add('active');
+  });
+  if(p==='history') renderHistory();
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+function show(id){document.getElementById(id).classList.remove('hidden');}
+function hide(id){document.getElementById(id).classList.add('hidden');}
+function numVal(id){return parseFloat(document.getElementById(id).value)||0;}
+function sumArr(a){return a.reduce((s,v)=>s+v,0);}
+function getArr(pfx,n){let a=[];for(let i=1;i<=n;i++)a.push(numVal(pfx+i));return a;}
+function fmtDate(ts){
+  let d=new Date(ts);
+  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})+
+    ' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+
+function setSplit(m){
+  splitMode=m;
+  document.getElementById('opt-small').classList.toggle('active',m==='small');
+  document.getElementById('opt-large').classList.toggle('active',m==='large');
+}
+
+// ── STEP 1 → 2 ───────────────────────────────────────────────────────────────
+function doAllocate(){
+  NF=parseInt(document.getElementById('numFeeders').value)||0;
+  NP=parseInt(document.getElementById('numPackets').value)||0;
+  if(NF<1||NP<1){alert('Please enter both Feeder and Packet count!');return;}
+
+  let ff='';
+  for(let i=1;i<=NF;i++)
+    ff+=`<div class="fgrp"><span class="flbl flbl-b">F${i}</span>
+      <input type="number" id="f${i}" min="0" placeholder="qty" oninput="updateTotals()"></div>`;
+  document.getElementById('feederFields').innerHTML=ff;
+
+  let pf='';
+  for(let i=1;i<=NP;i++)
+    pf+=`<div class="fgrp"><span class="flbl flbl-o">P${i}</span>
+      <input type="number" id="p${i}" min="0" placeholder="qty" oninput="updateTotals()"></div>`;
+  document.getElementById('packetFields').innerHTML=pf;
+
+  show('step2');
+  hide('step3');
+  hide('errBox');
+  ['totReq','totAvail','totMother'].forEach(id=>document.getElementById(id).textContent='0');
+  ['totReqExpr','totAvailExpr','totMotherExpr'].forEach(id=>document.getElementById(id).textContent='');
+}
+
+// ── LIVE TOTALS ───────────────────────────────────────────────────────────────
+function updateTotals(){
+  let fv=getArr('f',NF), pv=getArr('p',NP);
+  let tr=sumArr(fv), ta=sumArr(pv), m=ta-tr;
+
+  document.getElementById('totReq').textContent=tr;
+  document.getElementById('totAvail').textContent=ta;
+  document.getElementById('totReqExpr').textContent=fv.map((v,i)=>`F${i+1}(${v})`).join(' + ');
+  document.getElementById('totAvailExpr').textContent=pv.map((v,i)=>`P${i+1}(${v})`).join(' + ');
+  let mel=document.getElementById('totMother');
+  mel.textContent=m;
+  mel.style.color=m>=0?'var(--accent4)':'var(--danger)';
+  document.getElementById('totMotherExpr').textContent=`Avail(${ta}) − Req(${tr})`;
+}
+
+// ── CALCULATE ─────────────────────────────────────────────────────────────────
+function doCalculate(){
+  hide('errBox');
+  let fv=getArr('f',NF), pv=getArr('p',NP);
+
+  if(fv.some(v=>v<=0)||pv.some(v=>v<=0)){
+    showErr('⚠ All Feeder and Packet values must be greater than 0!');return;
+  }
+  let tr=sumArr(fv), ta=sumArr(pv);
+  if(tr>ta){showErr(`🚫 BLOCKED: Total Requirements (${tr}) > Total Available (${ta}).`);return;}
+  if(tr===ta){showErr('⚠ Total Req = Total Avail. No mother packet will remain. Please add extra qty to one packet.');return;}
+
+  let res=solve(fv,pv,splitMode);
+  if(!res.ok){showErr('⚠ '+res.err);return;}
+
+  lastResult=res; lastFv=[...fv]; lastPv=[...pv]; lastTotalReq=tr; lastTotalAvail=ta;
+  hide('saveMsg');
+  renderResult(res,fv,pv,tr,ta);
+}
+
+function showErr(msg){
+  let b=document.getElementById('errBox');
+  b.textContent=msg;b.classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SOLVER  — Fixed & Rewritten
+//  Strategy: For each candidate mother packet, try to fill all feeders using
+//  the remaining packets (greedy left-to-right). The key fix is that in LARGE
+//  mode, when a non-mother packet would leave a remainder < MIN, we must either:
+//    (a) give the entire packet (consume it fully), OR
+//    (b) try giving only enough so remainder is exactly MIN (if possible).
+//  We attempt both options and recurse, ensuring we find the correct solution.
+// ══════════════════════════════════════════════════════════════════════════════
+function solve(feeders,packets,mode){
+  const MIN=mode==='large'?50:0;
+
+  // Try each packet as the mother packet
+  for(let mIdx=0;mIdx<packets.length;mIdx++){
+    let res=tryMother(feeders,packets,mIdx,MIN);
+    if(res.ok) return res;
+  }
+  return {ok:false,err:'No valid single-mother allocation found. Please change split mode or adjust quantities.'};
+}
+
+function tryMother(feeders,packets,mIdx,MIN){
+  // Deep copy packet array
+  let pkts=packets.map((q,i)=>({id:i+1,qty:q,rem:q}));
+  let motherPkt=pkts[mIdx];
+
+  // Order: all non-mother packets first (in order), then mother last
+  let order=[...pkts.filter((_,i)=>i!==mIdx), motherPkt];
+
+  // Try to fill all feeders greedily
+  let rows=[];
+  let pktRems=order.map(p=>p.rem); // track remaining qty per packet in `order`
+
+  let success=fillFeeders(feeders,order,pktRems,motherPkt,MIN,rows);
+  if(!success) return {ok:false};
+
+  // After filling: exactly one packet should have remainder > 0, and it must be the mother
+  let remainingWithQty=order.filter((_,i)=>pktRems[i]>0);
+  if(remainingWithQty.length!==1) return {ok:false};
+  let survivorId=remainingWithQty[0].id;
+  if(survivorId!==motherPkt.id) return {ok:false};
+
+  // Reconstruct pkts final state
+  order.forEach((p,i)=>{ pkts[p.id-1].rem=pktRems[i]; });
+
+  // Build fdrs summary
+  let fdrs=feeders.map((q,i)=>({id:i+1,req:q,filled:q}));
+  let rem=pkts.filter(p=>p.rem>0);
+
+  return {ok:true,rows,pkts,fdrs,motherPkt:{id:motherPkt.id,rem:pktRems[order.indexOf(motherPkt)]}};
+}
+
+/**
+ * Greedy fill: go through packets in order, fill feeders one by one.
+ * For non-mother packets in LARGE mode, enforce minimum split constraint.
+ * Uses backtracking when a packet can't be used due to MIN constraint.
+ *
+ * Returns true if all feeders were fully satisfied.
+ */
+function fillFeeders(feeders, order, pktRems, motherPkt, MIN, rows){
+  // We'll use a stack-based iterative approach for clarity
+  // feederIdx, feederNeed, pktIdx, rows-snapshot
+  // Simple greedy with the correct logic:
+
+  let pktIdx=0;
+  for(let fi=0;fi<feeders.length;fi++){
+    let need=feeders[fi];
+    while(need>0){
+      // Skip fully consumed packets
+      while(pktIdx<order.length && pktRems[pktIdx]<=0) pktIdx++;
+      if(pktIdx>=order.length) return false; // ran out of packets
+
+      let pkt=order[pktIdx];
+      let rem=pktRems[pktIdx];
+      let isM=(pkt.id===motherPkt.id);
+
+      let give;
+      if(isM){
+        // Mother packet: give exactly what's needed (never more than rem)
+        give=Math.min(rem,need);
+      } else if(MIN===0){
+        // Small mode: no constraints
+        give=Math.min(rem,need);
+      } else {
+        // Large mode: non-mother packet
+        // Case 1: We can fully consume this packet (give all rem)
+        //   → allowed always (no split remainder to worry about)
+        // Case 2: We take some, leaving a remainder
+        //   → remainder must be >= MIN
+        //   → the amount given must also be >= MIN (if it's a split)
+
+        if(rem<=need){
+          // We'll consume the whole packet — always valid
+          give=rem;
+        } else {
+          // rem > need: we'd leave a partial remainder = rem - need
+          let afterGive=rem-need;
+          if(afterGive>=MIN){
+            // Safe split: we take exactly `need`, leave `afterGive` >= MIN
+            give=need;
+          } else {
+            // afterGive < MIN → can't take `need` from this packet
+            // Try: take (rem - MIN) so that remainder = MIN (valid split)
+            let takeToLeaveMin=rem-MIN;
+            if(takeToLeaveMin>=MIN && takeToLeaveMin>0 && takeToLeaveMin<=need){
+              // We can take `takeToLeaveMin` from this packet
+              give=takeToLeaveMin;
+            } else if(takeToLeaveMin>0 && takeToLeaveMin<=need){
+              // takeToLeaveMin might be < MIN itself but rem is valid
+              give=takeToLeaveMin;
+            } else {
+              // Cannot use this packet for this feeder's current need
+              // Skip this packet entirely
+              pktIdx++;
+              continue;
+            }
+          }
+        }
+      }
+
+      // Apply the allocation
+      let before=rem;
+      pktRems[pktIdx]-=give;
+      need-=give;
+
+      rows.push({
+        feeder:`F${fi+1}`,
+        packet:`P${pkt.id}`,
+        given:give,
+        pktBefore:before,
+        pktAfter:pktRems[pktIdx],
+        feederIdx:fi,
+        isMotherRow:(isM && pktRems[pktIdx]>0),
+        fullyConsumed:pktRems[pktIdx]===0
+      });
+
+      if(pktRems[pktIdx]<=0) pktIdx++;
+    }
+  }
+  return true;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  RENDER RESULT
+// ══════════════════════════════════════════════════════════════════════════════
+const COLORS=['#00d4ff','#ff6b35','#7fff6b','#ffd700','#c77dff','#ff006e','#00b4d8','#80ed99'];
+const ROW_BG=['rgba(0,212,255,.04)','rgba(255,107,53,.04)','rgba(127,255,107,.04)',
+              'rgba(255,215,0,.04)','rgba(180,100,255,.04)'];
+
+function renderResult(res,fv,pv,tr,ta,containerIds){
+  // containerIds optional: {tbl, flow, mother, sum} — used when re-rendering inside history
+  let ids=containerIds||{tbl:'resultTable',flow:'flowArea',mother:'motherBox',sum:'sumGrid'};
+  let {rows,pkts,fdrs,motherPkt}=res;
+
+  // Kit label
+  if(!containerIds){
+    let kid=document.getElementById('kitId').value.trim();
+    let klb=document.getElementById('kitLabelBar');
+    if(kid){klb.textContent=`📦 KIT ID : ${kid}`;klb.classList.remove('hidden');}
+    else klb.classList.add('hidden');
+  }
+
+  // Table
+  let html=`<table><thead><tr>
+    <th class="th-f">FEEDER</th><th class="th-f">REQUIREMENT</th>
+    <th class="th-p">PACKET</th><th class="th-q">QTY GIVEN</th>
+    <th class="th-r">PKT REMAINING</th><th class="th-s">STATUS</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    let badge;
+    if(r.fullyConsumed) badge=`<span class="badge b-consumed">⬛ FULLY CONSUMED</span>`;
+    else if(r.isMotherRow) badge=`<span class="badge b-mother">⭐ MOTHER PACKET</span>`;
+    else if(r.pktAfter>0) badge=`<span class="badge b-split">✂ SPLIT</span>`;
+    else badge=`<span class="badge b-full">✅ FILLED</span>`;
+    html+=`<tr style="background:${ROW_BG[r.feederIdx%ROW_BG.length]}">
+      <td style="color:var(--accent);font-weight:700;">${r.feeder}</td>
+      <td style="color:var(--muted);">${fv[r.feederIdx]}</td>
+      <td style="color:var(--accent2);font-weight:700;">${r.packet}</td>
+      <td style="color:var(--accent4);font-weight:700;">${r.given}</td>
+      <td style="color:${r.pktAfter>0?'var(--accent3)':'var(--muted)'};">${r.pktAfter}</td>
+      <td>${badge}</td></tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById(ids.tbl).innerHTML=html;
+
+  // Flow
+  let fhtml=`<div class="flow-title">📊 ALLOCATION FLOW</div><div class="flow-grid">`;
+  for(let fi=0;fi<fv.length;fi++){
+    let fr=rows.filter(r=>r.feederIdx===fi);
+    let col=COLORS[fi%COLORS.length];
+    fhtml+=`<div class="flow-block" style="border-left:3px solid ${col}">
+      <div class="flow-name" style="color:${col}">F${fi+1} · ${fv[fi]}</div>`;
+    fr.forEach(r=>{
+      fhtml+=`<div class="flow-row"><span class="fp">${r.packet}</span>
+        <span style="color:var(--muted)">→</span><span class="fq">${r.given}</span></div>`;
+    });
+    fhtml+=`</div>`;
+  }
+  fhtml+=`</div>`;
+  document.getElementById(ids.flow).innerHTML=fhtml;
+
+  // Mother
+  let mb=document.getElementById(ids.mother);
+  mb.textContent=`⭐  P${motherPkt.id} = ${motherPkt.rem}  (MOTHER PACKET)`;
+  mb.classList.remove('hidden');
+
+  // Summary
+  document.getElementById(ids.sum).innerHTML=`
+    <div class="sum-box"><div class="sum-lbl">Total Requirements</div>
+      <div class="sum-val" style="color:var(--accent)">${tr}</div></div>
+    <div class="sum-box"><div class="sum-lbl">Total Available</div>
+      <div class="sum-val" style="color:var(--accent2)">${ta}</div></div>
+    <div class="sum-box"><div class="sum-lbl">Mother Qty</div>
+      <div class="sum-val" style="color:var(--accent4)">${ta-tr}</div></div>`;
+
+  if(!containerIds){
+    show('step3');
+    document.getElementById('step3').scrollIntoView({behavior:'smooth'});
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  HISTORY  (localStorage)
+// ══════════════════════════════════════════════════════════════════════════════
+const HIST_KEY='fpa_history';
+
+function loadHistory(){
+  try{return JSON.parse(localStorage.getItem(HIST_KEY))||[];}catch{return[];}
+}
+function saveHistory(h){
+  try{localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){console.error(e);}
+}
+
+function saveToHistory(){
+  if(!lastResult){return;}
+  let empId=currentEmpId||localStorage.getItem('fpa_empId')||'';
+  let kid=document.getElementById('kitId').value.trim()||'(No Kit ID)';
+  let h=loadHistory();
+  let entry={
+    id:Date.now(),
+    empId:empId,
+    kitId:kid,
+    timestamp:Date.now(),
+    splitMode,
+    feeders:lastFv,
+    packets:lastPv,
+    totalReq:lastTotalReq,
+    totalAvail:lastTotalAvail,
+    motherQty:lastTotalAvail-lastTotalReq,
+    motherPktId:lastResult.motherPkt.id,
+    result:lastResult   // serialise full result
+  };
+  // If same kit already exists, update it; otherwise prepend
+  let idx=h.findIndex(e=>e.kitId===kid);
+  if(idx>=0) h[idx]=entry;
+  else h.unshift(entry);
+
+  saveHistory(h);
+  let sm=document.getElementById('saveMsg');
+  sm.textContent=`✅ Saved to history — Kit: ${kid}`;
+  sm.classList.remove('hidden');
+  setTimeout(()=>sm.classList.add('hidden'),3000);
+}
+
+function exportToExcel(){
+  let h=loadHistory();
+  let q=(document.getElementById('histSearch').value||'').toLowerCase().trim();
+  if(q) h=h.filter(e=>e.kitId.toLowerCase().includes(q));
+
+  if(h.length===0){
+    alert('No history available to export!');
+    return;
+  }
+
+  // Build CSV content
+  let csvRows=[];
+
+  // Sheet 1: Summary
+  csvRows.push(['=== KIT HISTORY SUMMARY ===']);
+  csvRows.push(['Employee ID','Kit ID','Date & Time','Split Mode','Feeders','Packets','Total Req','Total Avail','Mother Qty','Mother Packet']);
+  h.forEach(e=>{
+    csvRows.push([
+      e.empId||'',
+      e.kitId,
+      fmtDate(e.timestamp),
+      e.splitMode,
+      e.feeders.length,
+      e.packets.length,
+      e.totalReq,
+      e.totalAvail,
+      e.motherQty,
+      `P${e.motherPktId}`
+    ]);
+  });
+
+  csvRows.push([]);
+  csvRows.push(['=== DETAILED ALLOCATION ROWS ===']);
+  csvRows.push(['Employee ID','Kit ID','Date','Feeder','Requirement','Packet','Qty Given','Pkt Remaining','Status']);
+
+  h.forEach(e=>{
+    if(e.result && e.result.rows){
+      e.result.rows.forEach(r=>{
+        let status='';
+        if(r.fullyConsumed) status='FULLY CONSUMED';
+        else if(r.isMotherRow) status='MOTHER PACKET';
+        else if(r.pktAfter>0) status='SPLIT';
+        else status='FILLED';
+        csvRows.push([
+          e.empId||'',
+          e.kitId,
+          fmtDate(e.timestamp),
+          r.feeder,
+          e.feeders[r.feederIdx],
+          r.packet,
+          r.given,
+          r.pktAfter,
+          status
+        ]);
+      });
+    }
+  });
+
+  // Convert to CSV string
+  let csvContent=csvRows.map(row=>
+    row.map(cell=>{
+      let s=String(cell==null?'':cell);
+      if(s.includes(',')||s.includes('"')||s.includes('\n'))
+        s='"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(',')
+  ).join('\n');
+
+  // Add BOM for Excel UTF-8
+  let blob=new Blob(['\uFEFF'+csvContent],{type:'text/csv;charset=utf-8;'});
+  let url=URL.createObjectURL(blob);
+  let a=document.createElement('a');
+  a.href=url;
+  let dateStr=new Date().toISOString().slice(0,10);
+  a.download=`FeederHistory_${dateStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function deleteHistEntry(id){
+  let h=loadHistory().filter(e=>e.id!==id);
+  saveHistory(h);
+  renderHistory();
+}
+
+function renderHistory(){
+  let h=loadHistory();
+  let q=(document.getElementById('histSearch').value||'').toLowerCase().trim();
+  if(q) h=h.filter(e=>e.kitId.toLowerCase().includes(q));
+
+  document.getElementById('histCount').textContent=`${loadHistory().length} record${loadHistory().length!==1?'s':''} saved`;
+
+  let list=document.getElementById('histList');
+  if(h.length===0){
+    list.innerHTML=`<div class="hist-empty">📭 No history found.<br><br>Go to Calculator, run a calculation,<br>then press "SAVE TO HISTORY".</div>`;
+    return;
+  }
+
+  list.innerHTML=h.map((e,i)=>`
+    <div class="hist-item" id="hi-${e.id}">
+      <div class="hist-head" onclick="toggleHist(${e.id})">
+        <div>
+          <div class="hist-kit">📦 ${escHtml(e.kitId)}</div>
+          <div class="hist-meta">${fmtDate(e.timestamp)} &nbsp;·&nbsp; ${e.feeders.length} Feeders &nbsp;·&nbsp; ${e.packets.length} Packets</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div class="hist-tags">
+            <span class="hist-tag ht-req">Req:${e.totalReq}</span>
+            <span class="hist-tag ht-avail">Avail:${e.totalAvail}</span>
+            <span class="hist-tag ht-mother">⭐P${e.motherPktId}=${e.motherQty}</span>
+            <span class="hist-tag ht-mode">${e.splitMode}</span>
+          </div>
+          <div class="hist-actions" onclick="event.stopPropagation()">
+            <button class="btn btn-purple btn-sm" onclick="loadHistEntry(${e.id})">↩ Load</button>
+          </div>
+        </div>
+      </div>
+      <div class="hist-body" id="hb-${e.id}">
+        <div class="hist-section-lbl">Allocation Table</div>
+        <div class="tbl-wrap" id="htbl-${e.id}"></div>
+        <div id="hflow-${e.id}"></div>
+        <div id="hmoth-${e.id}" class="mother-box hidden"></div>
+        <div class="sum-grid" id="hsum-${e.id}"></div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleHist(id){
+  let body=document.getElementById(`hb-${id}`);
+  let isOpen=body.classList.contains('open');
+  // close all
+  document.querySelectorAll('.hist-body').forEach(b=>b.classList.remove('open'));
+  if(!isOpen){
+    body.classList.add('open');
+    // render if not already done
+    let e=loadHistory().find(x=>x.id===id);
+    if(e && document.getElementById(`htbl-${id}`).innerHTML===''){
+      renderResult(
+        e.result, e.feeders, e.packets, e.totalReq, e.totalAvail,
+        {tbl:`htbl-${id}`,flow:`hflow-${id}`,mother:`hmoth-${id}`,sum:`hsum-${id}`}
+      );
+    }
+  }
+}
+
+function loadHistEntry(id){
+  let e=loadHistory().find(x=>x.id===id);
+  if(!e) return;
+  // Fill Kit ID
+  document.getElementById('kitId').value=e.kitId==='(No Kit ID)'?'':e.kitId;
+  // Fill counts
+  document.getElementById('numFeeders').value=e.feeders.length;
+  document.getElementById('numPackets').value=e.packets.length;
+  // Allocate to build fields
+  NF=e.feeders.length; NP=e.packets.length;
+  doAllocate();
+  // Fill values
+  setTimeout(()=>{
+    e.feeders.forEach((v,i)=>{let el=document.getElementById(`f${i+1}`);if(el)el.value=v;});
+    e.packets.forEach((v,i)=>{let el=document.getElementById(`p${i+1}`);if(el)el.value=v;});
+    setSplit(e.splitMode);
+    updateTotals();
+  },50);
+  switchPage('calc');
+  setTimeout(()=>document.getElementById('step2').scrollIntoView({behavior:'smooth'}),150);
+}
+
+function escHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  EMPLOYEE ID LOGIN
+// ══════════════════════════════════════════════════════════════════════════════
+
+function onEmpInput(el){
+  // Strip non-digits and enforce maxlength
+  let clean=el.value.replace(/\D/g,'').slice(0,7);
+  el.value=clean;
+  let len=clean.length;
+  // Update dot indicators
+  for(let i=0;i<7;i++){
+    document.getElementById('dd'+i).classList.toggle('filled',i<len);
+  }
+  // Hide error on input
+  document.getElementById('loginErr').style.display='none';
+}
+
+function doLogin(){
+  let raw=document.getElementById('empIdInput').value;
+  let val=raw.replace(/\D/g,'').slice(0,7);
+  let errEl=document.getElementById('loginErr');
+
+  if(val.length!==7){
+    errEl.textContent='⚠ Please enter exactly 7 digits for Employee ID!';
+    errEl.style.display='block';
+    document.getElementById('empIdInput').focus();
+    return;
+  }
+
+  currentEmpId=val;
+  localStorage.setItem('fpa_empId', val);
+
+  // Directly hide overlay using class
+  document.getElementById('loginOverlay').classList.add('hide');
+
+  // Show employee badge in header
+  document.getElementById('empBadgeId').textContent=val;
+}
+
+// Init history count on load
+window.addEventListener('DOMContentLoaded',()=>{
+  let h=loadHistory();
+  document.getElementById('histCount').textContent=`${h.length} record${h.length!==1?'s':''} saved`;
+});
+</script>
+</body>
+</html>
